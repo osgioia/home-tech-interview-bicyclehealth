@@ -1,42 +1,73 @@
-import { Delays, greeter } from '../src/main';
+import {
+  AppointmentAvailability,
+  AppointmentAvailabilityDeps,
+  AppointmentTypeId,
+  TimeRange,
+} from '../src/main';
 
-describe('greeter function', () => {
-  const name = 'John';
-  let hello: string;
+describe('AppointmentAvailability', () => {
+  const provider1Id = 'provider-1';
 
-  let timeoutSpy: jest.SpyInstance;
+  it('correctly returns availability with a single booked appointment and calendar event', async () => {
+    const deps: AppointmentAvailabilityDeps = {
+      getCalendarEvents: async (providerId: string, start: Date, end: Date) => {
+        return [
+          {
+            calenderEventId: 'calendar-1',
+            start: new Date('2020-07-01T13:45:00.000Z'),
+            end: new Date('2020-07-01T14:15:00.000Z'),
+          },
+          {
+            calenderEventId: 'calendar-2',
+            start: new Date('2020-07-01T16:30:00.000Z'),
+            end: new Date('2020-07-01T16:45:00.000Z'),
+          }
+        ];
+      },
+      getBookedAppointments: async (
+        providerId: string,
+        start: Date,
+        end: Date,
+      ) => {
+        return [
+          {
+            appointmentId: 'appointment-1',
+            appointmentTypeId: AppointmentTypeId.NEW_PATIENT_60,
+            start: new Date('2020-07-01T15:00:00.000Z'),
+          },
+        ];
+      },
+    };
 
-  // Act before assertions
-  beforeAll(async () => {
-    // Read more about fake timers
-    // http://facebook.github.io/jest/docs/en/timer-mocks.html#content
-    // Jest 27 now uses "modern" implementation of fake timers
-    // https://jestjs.io/blog/2021/05/25/jest-27#flipping-defaults
-    // https://github.com/facebook/jest/pull/5171
-    jest.useFakeTimers();
-    timeoutSpy = jest.spyOn(global, 'setTimeout');
+    const appointmentAvailability = new AppointmentAvailability(deps);
+    const start = new Date('2020-07-01T13:00:00.000Z');
+    const end = new Date('2020-07-01T17:00:00.000Z');
 
-    const p: Promise<string> = greeter(name);
-    jest.runOnlyPendingTimers();
-    hello = await p;
-  });
-
-  // Teardown (cleanup) after assertions
-  afterAll(() => {
-    timeoutSpy.mockRestore();
-  });
-
-  // Assert if setTimeout was called properly
-  it('delays the greeting by 2 seconds', () => {
-    expect(setTimeout).toHaveBeenCalledTimes(1);
-    expect(setTimeout).toHaveBeenLastCalledWith(
-      expect.any(Function),
-      Delays.Long,
+    const result = await appointmentAvailability.getAvailableTimeRanges(
+      provider1Id,
+      AppointmentTypeId.FOLLOWUP_30,
+      start,
+      end,
     );
-  });
 
-  // Assert greeter result
-  it('greets a user with `Hello, {name}` message', () => {
-    expect(hello).toBe(`Hello, ${name}`);
+    const expectedResult: TimeRange[] = [
+      {
+        // - range 1: start: July 1, 2020 @ 1pm, end: July 1, 2020 @ 1:45pm
+        start: new Date('2020-07-01T13:00:00.000Z'),
+        end: new Date('2020-07-01T13:45:00.000Z'),
+      },
+      {
+        // - range 2: start: July 1, 2020 @ 2:15pm, end: July 1, 2020 @ 3:00pm
+        start: new Date('2020-07-01T14:15:00.000Z'),
+        end: new Date('2020-07-01T15:00:00.000Z'),
+      },
+      {
+        // - range 3: start: July 1, 2020 @ 4pm, end: July 1, 2020 @ 5pm
+        start: new Date('2020-07-01T16:00:00.000Z'),
+        end: new Date('2020-07-01T17:00:00.000Z'),
+      },
+    ];
+
+    expect(result).toEqual(expectedResult);
   });
 });
